@@ -6,20 +6,23 @@ const DealsList = ({ onDealSelect }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const API_BASE_URL = '/api';
+  const API_BASE_URL = process.env.NODE_ENV === 'production'
+    ? 'https://finlete-be.vercel.app/api'
+    : 'https://finlete-be.vercel.app/api';
 
   useEffect(() => {
     fetchDeals();
   }, []);
 
-  const fetchDeals = async () => {
+  const fetchDeals = async (retryCount = 0) => {
     try {
       setLoading(true);
+      console.log(`Fetching deals (attempt ${retryCount + 1})...`);
+      
       const response = await fetch(`${API_BASE_URL}/deals`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        mode: 'cors',
+        cache: 'no-cache'
       });
       
       if (!response.ok) {
@@ -32,11 +35,23 @@ const DealsList = ({ onDealSelect }) => {
       const data = await response.json();
       setDeals(data.items || []);
       setError(null);
+      console.log('Deals fetched successfully');
     } catch (err) {
-      setError(err.message);
       console.error('Error fetching deals:', err);
+      
+      // Retry up to 3 times with exponential backoff
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        console.log(`Retrying in ${delay}ms...`);
+        setTimeout(() => fetchDeals(retryCount + 1), delay);
+        return;
+      }
+      
+      setError(err.message);
     } finally {
-      setLoading(false);
+      if (retryCount === 0) {
+        setLoading(false);
+      }
     }
   };
 

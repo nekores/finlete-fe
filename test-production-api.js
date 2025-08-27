@@ -1,5 +1,7 @@
 // Test script to check production API
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? 'https://finlete-brf2um5bj-nekores-projects.vercel.app/api'
+  : 'http://localhost:3000/api';
 
 async function testProductionAPI() {
   console.log('🧪 Testing Production API...');

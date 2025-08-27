@@ -15,7 +15,11 @@ const CreateInvestorForm = ({ selectedDeal, onBack }) => {
   const [investorId, setInvestorId] = useState(null);
   const [accessLink, setAccessLink] = useState(null);
 
-  const API_BASE_URL = '/api';
+  // const API_BASE_URL = process.env.NODE_ENV === 'production'
+  //   ? 'https://finlete-be.vercel.app/api'
+  //   : 'http://localhost:3000/api';
+
+    const API_BASE_URL = 'http://localhost:3000/api';
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -52,75 +56,100 @@ const CreateInvestorForm = ({ selectedDeal, onBack }) => {
     return Object.keys(errors).length === 0;
   };
 
-  const createInvestor = async (data) => {
+  const createInvestor = async (data, retryCount = 0) => {
     try {
+      console.log(`Creating investor (attempt ${retryCount + 1})...`);
+      
       const response = await fetch(`${API_BASE_URL}/deals/${selectedDeal.id}/investors`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(data),
+        mode: 'cors',
+        cache: 'no-cache',
+        credentials: 'omit'
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || errorData.error || `HTTP error! status: ${response.status}`);
       }
-      return await response.json();
+      
+      const result = await response.json();
+      console.log('Investor created successfully');
+      return result;
     } catch (error) {
       console.error('Error creating investor:', error);
+      
+      // Retry up to 3 times with exponential backoff
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return createInvestor(data, retryCount + 1);
+      }
+      
       throw error;
     }
   };
 
-  const updateInvestor = async (investorId, data) => {
+  const updateInvestor = async (investorId, data, retryCount = 0) => {
     try {
-      console.log('updateInvestor called with method: PATCH');
+      console.log(`Updating investor (attempt ${retryCount + 1})...`);
+      
       const response = await fetch(`${API_BASE_URL}/deals/${selectedDeal.id}/investors/${investorId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(data),
+        mode: 'cors',
+        cache: 'no-cache',
+        credentials: 'omit'
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || errorData.error || `HTTP error! status: ${response.status}`);
       }
-      return await response.json();
+      
+      const result = await response.json();
+      console.log('Investor updated successfully');
+      return result;
     } catch (error) {
       console.error('Error updating investor:', error);
-      throw error;
-    }
-  };
-
-  const patchInvestor = async (investorId, data) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/deals/${selectedDeal.id}/investors/${investorId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(data),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.error || `HTTP error! status: ${response.status}`);
+      
+      // Retry up to 3 times with exponential backoff
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return updateInvestor(investorId, data, retryCount + 1);
       }
-      return await response.json();
-    } catch (error) {
-      console.error('Error patching investor:', error);
+      
       throw error;
     }
   };
 
-  const createIndividualProfile = async (investorData, investorType) => {
+  const createIndividualProfile = async (investorData, investorType, retryCount = 0) => {
     try {
       const url = `${API_BASE_URL}/investor_profiles/${investorType}`;
+      console.log(`Creating individual profile (attempt ${retryCount + 1})...`);
       console.log('Making request to:', url);
       console.log('Request data:', investorData);
       
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
+        mode: 'cors',
+        cache: 'no-cache',
+        credentials: 'omit',
         body: JSON.stringify(investorData)
       });
 
@@ -132,9 +161,21 @@ const CreateInvestorForm = ({ selectedDeal, onBack }) => {
         console.log('Error response:', errorData);
         throw new Error(errorData.message || errorData.error || `HTTP error! status: ${response.status}`);
       }
-      return await response.json();
+      
+      const result = await response.json();
+      console.log('Individual profile created successfully');
+      return result;
     } catch (error) {
       console.error('Error creating individual profile:', error);
+      
+      // Retry up to 3 times with exponential backoff
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return createIndividualProfile(investorData, investorType, retryCount + 1);
+      }
+      
       throw error;
     }
   };
@@ -145,11 +186,35 @@ const CreateInvestorForm = ({ selectedDeal, onBack }) => {
     if (currentStep === 1) {
       setLoading(true);
       try {
+        // Format phone number to E.164 format
+        const formatPhoneNumber = (phone) => {
+          // Remove all non-digit characters
+          const digits = phone.replace(/\D/g, '');
+          
+          // If it starts with 1 and has 11 digits, it's already US format
+          if (digits.length === 11 && digits.startsWith('1')) {
+            return `+${digits}`;
+          }
+          
+          // If it has 10 digits, assume it's US number and add +1
+          if (digits.length === 10) {
+            return `+1${digits}`;
+          }
+          
+          // If it already starts with +, return as is
+          if (phone.startsWith('+')) {
+            return phone;
+          }
+          
+          // Default: add +1 for US numbers
+          return `+1${digits}`;
+        };
+
         const investorData = {
           first_name: formData.firstName,
           last_name: formData.lastName,
           email: formData.email,
-          phone_number: formData.phone,
+          phone_number: formatPhoneNumber(formData.phone),
           tags: ['web-form'],
           deal_id: selectedDeal.id,
         };
@@ -235,12 +300,7 @@ const CreateInvestorForm = ({ selectedDeal, onBack }) => {
         
         // Use the response ID to update the investor with the profile ID
         if (profileResponse && profileResponse.id) {
-          const patchData = {
-            investor_profile_id: profileResponse.id,
-            current_step: "contact-information"
-          };
-          
-          await patchInvestor(profileResponse.id, patchData);
+          await updateInvestor(profileResponse.id, {});
         }
         
         // Redirect to payment page if access_link is available
